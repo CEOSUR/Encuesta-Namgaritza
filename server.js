@@ -7,6 +7,8 @@ function save(data){fs.mkdirSync('/data',{recursive:true});const temp=file+'.tmp
 function send(res,code,obj){res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(obj));}
 http.createServer((req,res)=>{
 const url=(req.url||'/').split('?')[0];
+if(url==='/admin'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});return fs.createReadStream(path.join(__dirname,'admin.html')).pipe(res);}
+if(url==='/api/admin/data'&&req.method==='GET'){if(!process.env.CEOSUR_ADMIN_PASSWORD||req.headers['x-admin-key']!==process.env.CEOSUR_ADMIN_PASSWORD)return send(res,403,{error:'Acceso restringido'});try{return send(res,200,{encuestas:load()});}catch(e){return send(res,500,{error:'Error de datos'});}}
 if(url==='/api/status'&&req.method==='GET'){try{return send(res,200,{total:load().length});}catch(e){return send(res,500,{error:'No se pudo consultar la base de datos'});}}
 if(url==='/api/sync'&&req.method==='POST'){
  let raw='';req.on('data',chunk=>{raw+=chunk;if(raw.length>2000000)req.destroy();});
