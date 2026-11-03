@@ -13,6 +13,54 @@ async function graphic(wb,ws,entries,total,heading,at,kind){
  parts.push('</svg>');const png=await sharp(Buffer.from(parts.join(''))).png().toBuffer();ws.addImage(wb.addImage({buffer:png,extension:'png'}),{tl:{col:at.col,row:at.row},ext:{width:688,height:368}});
 }
 
+
+function clean(v){return String(v??'').trim();}
+function norm(v){return clean(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\\s+/g,' ').toUpperCase();}
+function percentage(n,d){return d?n/d:0;}
+function extraSheet(wb,name,headers,widths){const ws=wb.addWorksheet(name);title(ws,name,headers.length);head(ws,headers);ws.columns=widths.map(w=>({width:w}));return ws;}
+function finishSheet(ws){ws.eachRow((row,i)=>{if(i<4)return;row.eachCell(c=>{c.border={bottom:{style:'hair',color:{argb:'DDE7DF'}}};if(i%2===0)c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'F5F8F5'}};c.alignment={vertical:'middle',wrapText:true};});});ws.views=[{state:'frozen',ySplit:3}];}
+function augment(wb,rows){
+ const total=rows.length;
+ const quality=extraSheet(wb,'Auditoría de calidad',['Control','Registros','% del total','Criterio'],[37,17,19,92]);
+ const idCounts=new Map();for(const r of rows){const id=clean(r.id);if(id)idCounts.set(id,(idCounts.get(id)||0)+1);}
+ const dup=rows.filter(r=>clean(r.id)&&idCounts.get(clean(r.id))>1).length;
+ const checks=[
+ ['ID repetido',dup,'Registros que comparten identificador; no se eliminan automáticamente'],
+ ['Sin identificador',rows.filter(r=>!clean(r.id)).length,'Falta el identificador único de la encuesta'],
+ ['Sin encuestador',rows.filter(r=>!clean(r.encuestador)).length,'No consta el responsable de campo'],
+ ['Sin parroquia',rows.filter(r=>!clean(r.parroquia)).length,'No consta la parroquia de sufragio'],
+ ['Sin circunscripción',rows.filter(r=>!clean(r.circunscripcion)).length,'No consta la circunscripción'],
+ ['Sin fecha',rows.filter(r=>!clean(r.fecha)).length,'No consta la fecha de registro'],
+ ['Sin respuestas electorales',rows.filter(r=>dimensions.every(k=>!clean(r[k]))).length,'Ninguna de las siete secciones tiene respuesta'],
+ ['Territorio incompatible',rows.filter(r=>{const p=norm(r.parroquia),c=norm(r.circunscripcion);return p&&c&&((p==='GUAYZIMI'&&c!=='URBANA')||(p!=='GUAYZIMI'&&c!=='RURAL'));}).length,'Guayzimi es urbana; las demás parroquias registradas son rurales'],
+ ['Voto urbano con sección rural',rows.filter(r=>norm(r.circunscripcion)==='URBANA'&&(clean(r.concejales_rurales)||dimensions.slice(4).some(k=>clean(r[k])))).length,'Revisar respuestas a dignidades rurales en circunscripción urbana'],
+ ['Voto rural con sección urbana',rows.filter(r=>norm(r.circunscripcion)==='RURAL'&&clean(r.concejales_urbanos)).length,'Revisar respuestas a concejales urbanos en circunscripción rural']
+ ];
+ checks.forEach(([name,n,detail])=>quality.addRow([name,n,percentage(n,total),detail]));for(let i=4;i<4+checks.length;i++)quality.getCell(i,3).numFmt='0.0%';finishSheet(quality);
+ const sample=extraSheet(wb,'Control de muestra',['Parroquia','Ejecutadas','Meta planificada','Pendientes','Cumplimiento','Observación'],[30,18,20,18,20,63]);
+ const parishes=[...new Set(rows.map(r=>clean(r.parroquia)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+ parishes.forEach(p=>{const n=rows.filter(r=>clean(r.parroquia)===p).length;const rr=sample.rowCount+1;sample.addRow([p,n,null,{formula:'IF(C'+rr+'="","",MAX(0,C'+rr+'-B'+rr+'))'},{formula:'IFERROR(IF(C'+rr+'="","",B'+rr+'/C'+rr+'),"")'},'Ingresar meta aprobada en columna C']);sample.getCell(rr,5).numFmt='0.0%';sample.getCell(rr,3).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF2C6'}};});
+ finishSheet(sample);
+ const cross=extraSheet(wb,'Cruces territoriales',['Dignidad','Parroquia','Circunscripción','Candidatura / respuesta','Menciones','Base válida','% válido','% de encuestas del sector'],[28,26,21,43,15,17,17,24]);
+ const territorial=extraSheet(wb,'Comparativo U-R',['Dignidad','Circunscripción','Candidatura / respuesta','Menciones','Base válida','% válido'],[30,23,48,16,18,18]);
+ for(const key of dimensions){
+  const groups=new Map();
+  for(const r of rows){const p=clean(r.parroquia)||'Sin registrar',c=clean(r.circunscripcion)||'Sin registrar',g=p+'\\u0001'+c;if(!groups.has(g))groups.set(g,[]);groups.get(g).push(r);}
+  for(const [g,subset] of groups){const [p,c]=g.split('\\u0001'),valid=subset.filter(r=>clean(r[key])),counts=tally(valid,key);for(const [candidate,n] of counts){const rr=cross.rowCount+1;cross.addRow([labels[key],p,c,candidate,n,valid.length,percentage(n,valid.length),percentage(n,subset.length)]);cross.getCell(rr,7).numFmt='0.0%';cross.getCell(rr,8).numFmt='0.0%';}}
+  for(const c of ['urbana','rural','Sin registrar']){const subset=rows.filter(r=>(clean(r.circunscripcion)||'Sin registrar').toLowerCase()===c.toLowerCase());const valid=subset.filter(r=>clean(r[key]));for(const [candidate,n] of tally(valid,key)){const rr=territorial.rowCount+1;territorial.addRow([labels[key],c,candidate,n,valid.length,percentage(n,valid.length)]);territorial.getCell(rr,6).numFmt='0.0%';}}
+ }
+ finishSheet(cross);finishSheet(territorial);
+ const base=extraSheet(wb,'Bases y no respuesta',['Dignidad','Encuestas totales','Con respuesta','Sin respuesta','% respuesta','Ninguno','Indecisos / no opina','Nota'],[30,20,20,20,19,16,22,85]);
+ for(const key of dimensions){const valid=rows.filter(r=>clean(r[key])),none=valid.filter(r=>norm(r[key])==='NINGUNO').length,undecided=valid.filter(r=>/INDECIS|NO OPINA|NO SABE|NS\\/NR|NO RESPONDE/.test(norm(r[key]))).length;const rr=base.rowCount+1;base.addRow([labels[key],total,valid.length,total-valid.length,percentage(valid.length,total),none,undecided,'Base válida = respuestas no vacías. Ninguno e indecisos permanecen visibles en el denominador descriptivo.']);base.getCell(rr,5).numFmt='0.0%';}
+ finishSheet(base);
+ const notes=wb.getWorksheet('Metodología');
+ notes.addRow(['Auditoría','Los controles identifican registros para revisión; no alteran ni eliminan respuestas originales.']);
+ notes.addRow(['Cruces','Porcentajes por dignidad dentro de cada parroquia y circunscripción, con base válida visible.']);
+ notes.addRow(['Muestra','Las metas planificadas deben ingresarse manualmente; no se inventan cuotas.']);
+ notes.addRow(['No respuesta','Ninguno e indecisos son respuestas observadas y se muestran por separado.']);
+ notes.addRow(['Alcance','Resultados descriptivos de encuestas registradas; no equivalen a pronóstico electoral.']);
+}
+
 const GREEN='165A3D',DARK='142B23',GOLD='C6A64A',WHITE='FFFFFF',PALE='EAF4ED';
 const dimensions=['prefecto','alcalde','concejales_urbanos','concejales_rurales','vocales_nuevo_paraiso','vocales_zurmi','vocales_namkays'];
 const labels={prefecto:'Prefectura',alcalde:'Alcaldía',concejales_urbanos:'Concejales urbanos',concejales_rurales:'Concejales rurales',vocales_nuevo_paraiso:'Vocales Nuevo Paraíso',vocales_zurmi:'Vocales Zurmi',vocales_namkays:'Vocales Namkays'};
@@ -27,5 +75,6 @@ summary(wb,'Por encuestador',rows,'encuestador');summary(wb,'Por parroquia',rows
 for(const key of dimensions){const valid=rows.filter(r=>typeof r[key]==='string'&&r[key].trim());const ws=wb.addWorksheet(labels[key].slice(0,31));title(ws,labels[key].toUpperCase(),6);head(ws,['Candidatura / Respuesta','Menciones','% válido','Semáforo','Diagrama','Base válida']);const entries=tally(valid,key);entries.forEach(([name,n],i)=>{const rr=i+4;ws.addRow([name,n,{formula:'IFERROR(B'+rr+'/'+valid.length+',0)',result:valid.length?n/valid.length:0},{formula:'IF(C'+rr+'>=0.5,"VERDE",IF(C'+rr+'>=0.2,"AMARILLO","ROJO"))'},{formula:'REPT("■",ROUND(C'+rr+'*25,0))'},valid.length]);ws.getCell(rr,3).numFmt='0.0%';ws.getCell(rr,5).font={color:{argb:GREEN}}});if(entries.length)ws.addConditionalFormatting({ref:'C4:C'+(entries.length+3),rules:[{type:'colorScale',cfvo:[{type:'min'},{type:'percentile',value:50},{type:'max'}],color:['F4B8B8','F5E8A3','A6D8B1']}]});style(ws,[['',44],['',16],['',17],['',18],['',33],['',16]]);await chart(wb,ws,entries,valid.length,'RESULTADOS · '+labels[key].toUpperCase(),{col:7,row:3});await graphic(wb,ws,entries,valid.length,'PORCENTAJES · '+labels[key].toUpperCase(),{col:7,row:23},'pie');await graphic(wb,ws,entries,valid.length,'COMPARACIÓN · '+labels[key].toUpperCase(),{col:7,row:43},'vertical');}
 const keys=['numero_general','id','fecha','encuestador','parroquia','circunscripcion','parroquia_realizacion',...dimensions,...new Set(rows.flatMap(r=>Object.keys(r)).filter(k=>!['numero_general','id','fecha','encuestador','parroquia','circunscripcion','parroquia_realizacion',...dimensions].includes(k)))];const raw=wb.addWorksheet('Base consolidada');title(raw,'BASE CONSOLIDADA',keys.length);head(raw,keys);rows.forEach(r=>raw.addRow(keys.map(k=>{const v=r[k];return v==null?'':typeof v==='object'?JSON.stringify(v):String(v)})));style(raw,keys.map(k=>['',Math.min(45,Math.max(16,k.length+3))]));raw.views=[{state:'frozen',ySplit:3,xSplit:4}];
 const notes=wb.addWorksheet('Metodología');title(notes,'CRITERIOS DE LECTURA',3);[['Indicador','Criterio'],['Base válida','Encuestas con respuesta no vacía en la dignidad correspondiente'],['Porcentaje','Menciones / base válida de esa dignidad'],['Semáforo','Verde >=50%; amarillo >=20% y <50%; rojo <20%; clasificación descriptiva'],['Diagrama','Barras de caracteres proporcionales al porcentaje'],['Cobertura','Registros recibidos en el servidor; no incluye pendientes sin sincronizar'],['Calidad','Revisar duplicados, respuestas incompletas y sesgos antes de emitir conclusiones']].forEach((x,i)=>notes.getRow(i+3).values=x);style(notes,[['',27],['',95],['',20]]);
+augment(wb,rows);
 return wb.xlsx.writeBuffer();}
 module.exports={build};
