@@ -51,7 +51,7 @@ function augment(wb,rows){
  }
  finishSheet(cross);finishSheet(territorial);
  const base=extraSheet(wb,'Bases y no respuesta',['Dignidad','Encuestas totales','Con respuesta','Sin respuesta','% respuesta','Ninguno','Indecisos / no opina','Nota'],[30,20,20,20,19,16,22,85]);
- for(const key of dimensions){const valid=rows.filter(r=>clean(r[key])),none=valid.filter(r=>norm(r[key])==='NINGUNO').length,undecided=valid.filter(r=>/INDECIS|NO OPINA|NO SABE|NS\\/NR|NO RESPONDE/.test(norm(r[key]))).length;const rr=base.rowCount+1;base.addRow([labels[key],total,valid.length,total-valid.length,percentage(valid.length,total),none,undecided,'Base válida = respuestas no vacías. Ninguno e indecisos permanecen visibles en el denominador descriptivo.']);base.getCell(rr,5).numFmt='0.0%';}
+ for(const key of dimensions){const valid=rows.filter(r=>clean(r[key])),none=valid.filter(r=>norm(r[key])==='NINGUNO').length,undecided=valid.filter(r=>/INDECIS|NO OPINA|NO SABE|NS-NR|NO RESPONDE/.test(norm(r[key]))).length;const rr=base.rowCount+1;base.addRow([labels[key],total,valid.length,total-valid.length,percentage(valid.length,total),none,undecided,'Base válida = respuestas no vacías. Ninguno e indecisos permanecen visibles en el denominador descriptivo.']);base.getCell(rr,5).numFmt='0.0%';}
  finishSheet(base);
  const notes=wb.getWorksheet('Metodología');
  notes.addRow(['Auditoría','Los controles identifican registros para revisión; no alteran ni eliminan respuestas originales.']);
