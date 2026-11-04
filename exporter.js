@@ -84,12 +84,12 @@ const candidateCatalog={
 };
 function fullTally(rows,key){
  const counts=new Map();
- const catalog=candidateCatalog[key]||[];
+ const catalog=[...(candidateCatalog[key]||[]),'AÚN NO DECIDE','NINGUNO','NO OPINA'];
  const canon=name=>norm(name).replace(/[^A-Z0-9Ñ ]/g,'').replace(/\\s+/g,' ').trim();
  for(const name of catalog)counts.set(canon(name),[name.toUpperCase(),0]);
  for(const [name,n] of tally(rows,key)){
   const id=canon(name);
-  let target=id;
+  let target=/^(AUN NO DECIDE|AUN NO DECID[EIO]|INDECIS[OA]|INDECISOS|NO SABE|NO HA DECIDIDO|TODAVIA NO DECIDE)$/.test(id)?canon('AÚN NO DECIDE'):/^(NINGUNA|NINGUNO)$/.test(id)?canon('NINGUNO'):/^(NO OPINA|NO RESPONDE|NS NR)$/.test(id)?canon('NO OPINA'):id;
   if(!counts.has(target)&&id.split(' ').length>=2){
    const matches=[...counts.keys()].filter(k=>{
     const a=id.split(' '),b=k.split(' ');
