@@ -43,7 +43,7 @@ function initGeo(){
  const container=field?.closest('section')||form;
  if(document.getElementById('ceosur-geo-button'))return;
  const wrap=document.createElement('div');wrap.style.cssText='margin:12px 0;padding:14px;border:1px solid #91b8a0;border-radius:10px;background:#eff9f2';
- const button=document.createElement('button');button.type='button';button.id='ceosur-geo-button';button.textContent='📍 Obtener ubicación actual';button.style.cssText='padding:12px;background:#17613f;color:white;border:0;border-radius:8px;cursor:pointer';
+ const button=document.createElement('button');button.type='button';button.id='ceosur-geo-button';button.textContent='📍 Ubicación';button.style.cssText='padding:12px;background:#17613f;color:white;border:0;border-radius:8px;cursor:pointer';
  const status=document.createElement('p');status.id='ceosur-geo-status';status.textContent='Toque el botón desde el lugar donde realiza la encuesta y permita el acceso a la ubicación.';
  const link=document.createElement('a');link.id='ceosur-geo-link';link.target='_blank';link.rel='noopener noreferrer';link.style.cssText='display:none;color:#17613f;font-weight:bold';link.textContent='Abrir ubicación en Google Maps';
  for(const name of ['latitud','longitud','precision_metros','ubicacion_mapa']){if(!form.elements[name]){const input=document.createElement('input');input.type='hidden';input.name=name;form.appendChild(input);}}
@@ -56,9 +56,10 @@ function initGeo(){
    form.elements.latitud.value=lat;form.elements.longitud.value=lon;form.elements.precision_metros.value=String(accuracy);form.elements.ubicacion_mapa.value=url;
    if(field&&field.tagName==='INPUT')field.value=lat+', '+lon;
    link.href=url;link.style.display='inline-block';status.textContent='Ubicación registrada · precisión aproximada: '+accuracy+' m. Compruebe el punto en el mapa.';
-   button.disabled=false;button.textContent='📍 Actualizar ubicación';
+   button.disabled=false;button.textContent='📍 Ubicación';
   },err=>{status.textContent=err.code===1?'Permiso de ubicación denegado. Habilítelo en el navegador.':'No se pudo obtener la ubicación. Active el GPS e inténtelo de nuevo.';button.disabled=false;},{enableHighAccuracy:true,timeout:18000,maximumAge:0});
  });
+ for(const name of ['latitud','longitud']){const existing=form.querySelectorAll('[name="'+name+'"]');existing.forEach(node=>{if(node.type!=='hidden'){node.type='hidden';const label=node.closest('label');if(label&&label.textContent.trim().toLowerCase().startsWith(name))label.style.display='none';}});}
  wrap.append(button,status,link);container.appendChild(wrap);
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initGeo);else initGeo();
