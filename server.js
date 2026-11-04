@@ -60,6 +60,8 @@ function initGeo(){
   },err=>{status.textContent=err.code===1?'Permiso de ubicación denegado. Habilítelo en el navegador.':'No se pudo obtener la ubicación. Active el GPS e inténtelo de nuevo.';button.disabled=false;},{enableHighAccuracy:true,timeout:18000,maximumAge:0});
  });
  for(const name of ['latitud','longitud']){const existing=form.querySelectorAll('[name="'+name+'"]');existing.forEach(node=>{if(node.type!=='hidden'){node.type='hidden';const label=node.closest('label');if(label&&label.textContent.trim().toLowerCase().startsWith(name))label.style.display='none';}});}
+ // Mantener un único control GPS visible; no eliminar campos de datos.
+ for(const other of form.querySelectorAll('button,input[type="button"]')){if(other===button)continue;const label=(other.textContent||other.value||'').trim().toLocaleLowerCase('es');if(/^(📍\\s*)?(obtener |capturar |registrar |actualizar )?ubicaci[oó]n( actual)?$/.test(label)){other.style.display='none';other.setAttribute('aria-hidden','true');}}
  wrap.append(button,status,link);container.appendChild(wrap);
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initGeo);else initGeo();
