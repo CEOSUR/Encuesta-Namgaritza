@@ -84,11 +84,24 @@ const candidateCatalog={
 };
 function fullTally(rows,key){
  const counts=new Map();
- for(const name of candidateCatalog[key]||[])counts.set(norm(name),[name,0]);
- for(const [name,n] of tally(rows,key)){const id=norm(name);if(counts.has(id))counts.get(id)[1]+=n;else counts.set(id,[name,n]);}
- return [...counts.values()].sort((a,b)=>b[1]-a[1]);
+ const catalog=candidateCatalog[key]||[];
+ const canon=name=>norm(name).replace(/[^A-Z0-9Ñ ]/g,'').replace(/\\s+/g,' ').trim();
+ for(const name of catalog)counts.set(canon(name),[name.toUpperCase(),0]);
+ for(const [name,n] of tally(rows,key)){
+  const id=canon(name);
+  let target=id;
+  if(!counts.has(target)&&id.split(' ').length>=2){
+   const matches=[...counts.keys()].filter(k=>{
+    const a=id.split(' '),b=k.split(' ');
+    return a.length>=2&&b.length>=2&&(a.every(t=>b.includes(t))||b.every(t=>a.includes(t)));
+   });
+   if(matches.length===1)target=matches[0];
+  }
+  if(counts.has(target))counts.get(target)[1]+=n;
+  else counts.set(target,[String(name).trim().toUpperCase(),n]);
+ }
+ return [...counts.values()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],'es'));
 }
-
 function summary(wb,name,rows,key){const ws=wb.addWorksheet(name);title(ws,name,5);head(ws,['Categoría','Encuestas','% del total','Semáforo','Barra porcentual']);const total=rows.length;const list=tally(rows,key);list.forEach(([v,n],i)=>{const r=i+4;ws.addRow([v,n,null,null,null]);ws.getCell(r,3).value={formula:'IFERROR(B'+r+'/'+total+',0)',result:total?n/total:0};ws.getCell(r,3).numFmt='0.0%';ws.getCell(r,4).value={formula:'IF(C'+r+'>=0.5,"VERDE",IF(C'+r+'>=0.2,"AMARILLO","ROJO"))'};ws.getCell(r,5).value=total?n/total:0;ws.getCell(r,5).numFmt='0.0%';});if(list.length)ws.addConditionalFormatting({ref:'C4:C'+(list.length+3),rules:[{type:'colorScale',cfvo:[{type:'min'},{type:'percentile',value:50},{type:'max'}],color:['F4B8B8','F5E8A3','A6D8B1']}]});if(list.length)ws.addConditionalFormatting({ref:'E4:E'+(list.length+3),rules:[{type:'dataBar',cfvo:[{type:'num',value:0},{type:'num',value:1}],color:'17613F',showValue:true}]});style(ws,[['',35],['',18],['',18],['',20],['',34]]);return ws;}
 async function build(rows){const wb=new ExcelJS.Workbook();wb.creator='CEO SUR CONSULTORES';wb.title='Nangaritza 2027 | Informe electoral';wb.created=new Date();
 const dash=wb.addWorksheet('Panel ejecutivo');title(dash,'PANEL EJECUTIVO',5);dash.getCell('A3').value='Indicador';dash.getCell('B3').value='Resultado';head(dash,['Indicador','Resultado','Interpretación','Estado','Detalle']);const total=rows.length,unique=new Set(rows.map(r=>r.encuestador).filter(Boolean)).size;const indicators=[['Encuestas sincronizadas',total,'Registros recibidos en el servidor'],['Encuestadores identificados',unique,'Nombres distintos registrados'],['Parroquias cubiertas',new Set(rows.map(r=>r.parroquia).filter(Boolean)).size,'Parroquias con al menos una encuesta'],['Registros urbanos',rows.filter(r=>String(r.circunscripcion).toLowerCase()==='urbana').length,'Según circunscripción declarada'],['Registros rurales',rows.filter(r=>String(r.circunscripcion).toLowerCase()==='rural').length,'Según circunscripción declarada']];for(const x of indicators)dash.addRow([x[0],x[1],x[2]]);dash.getCell('A11').value='NOTA METODOLÓGICA';dash.getCell('A12').value='Los porcentajes electorales se calculan por respuesta válida para cada dignidad. La semaforización es descriptiva, no una predicción electoral.';dash.mergeCells('A12:E12');dash.getCell('A12').alignment={wrapText:true};dash.getRow(12).height=45;style(dash,[['',34],['',19],['',47],['',18],['',30]]);await chart(wb,dash,tally(rows,'parroquia'),total,'COBERTURA POR PARROQUIA',{col:6,row:3});await chart(wb,dash,tally(rows,'encuestador'),total,'PRODUCTIVIDAD POR ENCUESTADOR',{col:6,row:20});await graphic(wb,dash,tally(rows,'parroquia'),total,'DISTRIBUCIÓN TERRITORIAL',{col:6,row:39},'pie');await graphic(wb,dash,tally(rows,'encuestador'),total,'COMPARATIVO DE ENCUESTADORES',{col:6,row:59},'vertical');
