@@ -36,6 +36,34 @@ fs.readFile(path.join(__dirname,'index.html'),'utf8',(err,html)=>{
  html=html.replace(originalHandler,"const num='',person=this.elements.encuestador.value.trim();");
  const injection='<script>'+"(function(){\nfunction start(){\n const form=document.getElementById('survey'), field=form?.elements?.encuestador;\n if(!form||!field||typeof getAll!=='function')return;\n let box=document.getElementById('ceosur-counter-v25');\n if(!box){box=document.createElement('div');box.id='ceosur-counter-v25';box.style.cssText='padding:14px;margin:12px 0;border:2px solid #164e3b;border-radius:12px;background:#e7f7ee;color:#164e3b';box.innerHTML='<strong>CONTADOR AUTOMÁTICO POR ENCUESTADOR</strong><p id=\"ceosur-person-count\" aria-live=\"polite\"></p><small>Registros guardados en este celular. Para consolidar varios celulares, exporte e importe los respaldos JSON.</small>';field.closest('section').appendChild(box);}\n const numberField=form.elements.numero_encuestado;\n if(numberField){numberField.readOnly=true;numberField.setAttribute('aria-label','Número automático de encuestado');numberField.placeholder='Se asigna automáticamente';numberField.style.background='#e7f7ee';}\n const parishSelect=document.getElementById('parroquia'),circSelect=document.getElementById('circunscripcion');\n if(parishSelect&&circSelect){\n  const syncTerritory=()=>{const p=parishSelect.value;const target=p==='Guayzimi'?'urbana':p?'rural':'';if(circSelect.value!==target){circSelect.value=target;if(typeof renderBallot==='function')renderBallot();}};\n  circSelect.style.pointerEvents='none';circSelect.tabIndex=-1;circSelect.title='La circunscripción se asigna automáticamente según la parroquia donde sufraga';\n  parishSelect.addEventListener('change',()=>setTimeout(syncTerritory,0));syncTerritory();\n }\n const label=document.getElementById('ceosur-person-count'),norm=x=>String(x||'').trim().replace(/\\s+/g,' ').toLocaleUpperCase('es');\n async function refresh(){try{const n=norm(field.value);if(!n){label.textContent='Ingrese el nombre del encuestador.';if(numberField)numberField.value='';return;}const rows=await getAll('encuestas');const mine=rows.filter(r=>norm(r.encuestador)===n);const total=mine.length;const next=Math.max(total,...mine.map(r=>Number(r.numero_encuestado)||0))+1;if(numberField)numberField.value=String(next);label.textContent=n+' — '+total+' encuesta(s) guardada(s). Siguiente: N.º '+next;}catch(e){label.textContent='No se pudo consultar el contador: '+e.message;}}\n field.addEventListener('input',refresh);field.addEventListener('change',refresh);\n form.addEventListener('submit',()=>setTimeout(refresh,600));\n document.getElementById('restoreData')?.addEventListener('change',()=>setTimeout(refresh,1200));\n refresh();\n}\nif(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();\n})();"+'</script><script>'+script+'</script>';
  html=html.replace('</body>',injection+'<script>(function(){const ids=["csv","json","restoreData","summary"];for(const id of ids){const node=document.getElementById(id);if(node){node.style.display="none";const parent=node.closest("button,label");if(parent)parent.style.display="none";}}const state=document.getElementById("ceosur-global-state");if(state){state.textContent="Mis encuestas guardadas en este celular";}const update=()=>{if(!state||typeof getAll!=="function")return;getAll("encuestas").then(rows=>{const n=String(document.getElementById("survey")?.elements?.encuestador?.value||"").trim().toUpperCase();state.textContent="Mis encuestas en este celular: "+rows.filter(r=>String(r.encuestador||"").trim().toUpperCase()===n).length;}).catch(()=>{});};document.getElementById("survey")?.elements?.encuestador?.addEventListener("input",update);document.getElementById("survey")?.addEventListener("submit",()=>setTimeout(update,1200));setTimeout(update,500);})();</script></body>');
+ const geoScript = `(function(){
+function initGeo(){
+ const form=document.getElementById('survey');if(!form)return;
+ const field=form.elements.parroquia_realizacion||form.querySelector('[name="ubicacion"]');
+ const container=field?.closest('section')||form;
+ if(document.getElementById('ceosur-geo-button'))return;
+ const wrap=document.createElement('div');wrap.style.cssText='margin:12px 0;padding:14px;border:1px solid #91b8a0;border-radius:10px;background:#eff9f2';
+ const button=document.createElement('button');button.type='button';button.id='ceosur-geo-button';button.textContent='📍 Obtener ubicación actual';button.style.cssText='padding:12px;background:#17613f;color:white;border:0;border-radius:8px;cursor:pointer';
+ const status=document.createElement('p');status.id='ceosur-geo-status';status.textContent='Toque el botón desde el lugar donde realiza la encuesta y permita el acceso a la ubicación.';
+ const link=document.createElement('a');link.id='ceosur-geo-link';link.target='_blank';link.rel='noopener noreferrer';link.style.cssText='display:none;color:#17613f;font-weight:bold';link.textContent='Abrir ubicación en Google Maps';
+ for(const name of ['latitud','longitud','precision_metros','ubicacion_mapa']){if(!form.elements[name]){const input=document.createElement('input');input.type='hidden';input.name=name;form.appendChild(input);}}
+ button.addEventListener('click',()=>{
+  if(!navigator.geolocation){status.textContent='Este dispositivo no permite obtener la ubicación.';return;}
+  button.disabled=true;status.textContent='Consultando ubicación GPS…';
+  navigator.geolocation.getCurrentPosition(pos=>{
+   const lat=pos.coords.latitude.toFixed(6),lon=pos.coords.longitude.toFixed(6),accuracy=Math.round(pos.coords.accuracy);
+   const url='https://www.google.com/maps?q='+encodeURIComponent(lat+','+lon);
+   form.elements.latitud.value=lat;form.elements.longitud.value=lon;form.elements.precision_metros.value=String(accuracy);form.elements.ubicacion_mapa.value=url;
+   if(field&&field.tagName==='INPUT')field.value=lat+', '+lon;
+   link.href=url;link.style.display='inline-block';status.textContent='Ubicación registrada · precisión aproximada: '+accuracy+' m. Compruebe el punto en el mapa.';
+   button.disabled=false;button.textContent='📍 Actualizar ubicación';
+  },err=>{status.textContent=err.code===1?'Permiso de ubicación denegado. Habilítelo en el navegador.':'No se pudo obtener la ubicación. Active el GPS e inténtelo de nuevo.';button.disabled=false;},{enableHighAccuracy:true,timeout:18000,maximumAge:0});
+ });
+ wrap.append(button,status,link);container.appendChild(wrap);
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initGeo);else initGeo();
+})();`;
+ html=html.replace('</body>','<script>'+geoScript+'</script></body>');
  res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(html);
 });
 }).listen(port,'0.0.0.0',()=>console.log('CEO SUR central sync listening on '+port));
