@@ -8,4 +8,4 @@ La aplicación requiere `index.html`, `server.js` y `package.json` del paquete *
 
 ## Privacidad y datos
 
-La versión offline conserva respuestas en el navegador de cada dispositivo y requiere exportar respaldos periódicos. No existe sincronización automática entre teléfonos. No publicar respaldos de encuestas ni información personal en este repositorio.
+La versión offline conserva respuestas en el navegador de cada dispositivo y requiere respaldos periódicos y comprobación de la sincronización central. La aplicación incluye sincronización automática de encuestas pendientes al recuperar conexión, siempre que el servidor y su almacenamiento persistente estén disponibles. No publicar respaldos de encuestas ni información personal en este repositorio.
