@@ -10,7 +10,7 @@ function correctSurveyorRecords(){const rows=load();let changed=0;const updated=
 
 function save(data){fs.mkdirSync('/data',{recursive:true});const temp=file+'.tmp';fs.writeFileSync(temp,JSON.stringify(data));fs.renameSync(temp,file);}
 
-const excludedSurveyors=new Set(['PATRICIO URTADO','MARIA FERNAMDA LOPEZ','MARIA FERNANDA LOPEZ']);
+const excludedSurveyors=new Set(['PATRICIO URTADO','PATRICIO U','MARIA FERNAMDA LOPEZ','MARIA FERNANDA LOPEZ','MARIA LOPEZ']);
 function surveyorKey(v){return String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\s+/g,' ').toUpperCase();}
 const deletedIdsFile='/data/encuestas_pruebas_eliminadas_ids.json';
 function deletedIds(){try{const ids=JSON.parse(fs.readFileSync(deletedIdsFile,'utf8'));return new Set(Array.isArray(ids)?ids:[]);}catch(e){if(e.code==='ENOENT')return new Set();throw e;}}
