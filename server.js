@@ -9,6 +9,26 @@ function load(){try{const data=JSON.parse(fs.readFileSync(file,'utf8'));return A
 function correctSurveyorRecords(){const rows=load();let changed=0;const updated=rows.map(r=>{if(!r||typeof r!=='object'||typeof r.encuestador!=='string')return r;const name=normalizeSurveyorName(r.encuestador);if(name===r.encuestador)return r;const key=r.encuestador.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').trim().replace(/\\s+/g,' ').toUpperCase();if(key!=='BELGICA MARISOL RAMIREZ HERMIJOS')return r;changed++;return {...r,encuestador:name};});if(changed){const backup=file+'.backup-before-armijos-correction.json';if(!fs.existsSync(backup))fs.copyFileSync(file,backup);save(updated);console.log('Corrección encuestadora Bélgica Marisol Ramírez Armijos: '+changed+' registros actualizados; total conservado: '+updated.length);}else console.log('Corrección encuestadora: sin registros pendientes de modificar; total: '+rows.length);}
 
 function save(data){fs.mkdirSync('/data',{recursive:true});const temp=file+'.tmp';fs.writeFileSync(temp,JSON.stringify(data));fs.renameSync(temp,file);}
+
+const excludedSurveyors=new Set(['PATRICIO URTADO','MARIA FERNAMDA LOPEZ','MARIA FERNANDA LOPEZ']);
+function surveyorKey(v){return String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\s+/g,' ').toUpperCase();}
+const deletedIdsFile='/data/encuestas_pruebas_eliminadas_ids.json';
+function deletedIds(){try{const ids=JSON.parse(fs.readFileSync(deletedIdsFile,'utf8'));return new Set(Array.isArray(ids)?ids:[]);}catch(e){if(e.code==='ENOENT')return new Set();throw e;}}
+function removeTestSurveys(){
+ const original=load(),selected=original.filter(r=>r&&excludedSurveyors.has(surveyorKey(r.encuestador)));
+ if(!selected.length){console.log('Depuración de encuestas de prueba: sin registros pendientes. Total: '+original.length);return;}
+ fs.mkdirSync('/data',{recursive:true});
+ const stamp=new Date().toISOString().replace(/[:.]/g,'-');
+ const backup='/data/encuestas_backup_antes_de_eliminar_pruebas_'+stamp+'.json';
+ fs.writeFileSync(backup,JSON.stringify(original));
+ const ids=deletedIds();
+ for(const r of selected)if(typeof r.id==='string'&&r.id)ids.add(r.id);
+ const idsTmp=deletedIdsFile+'.tmp';fs.writeFileSync(idsTmp,JSON.stringify([...ids]));fs.renameSync(idsTmp,deletedIdsFile);
+ const kept=original.filter(r=>!r||!excludedSurveyors.has(surveyorKey(r.encuestador)));
+ save(kept);
+ console.log('Encuestas de prueba eliminadas: '+selected.length+'; conservadas: '+kept.length+'; respaldo: '+backup);
+}
+
 function send(res,code,obj){res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(obj));}
 const server=http.createServer((req,res)=>{
 const url=(req.url||'/').split('?')[0];
@@ -22,9 +42,10 @@ if(url==='/api/sync'&&req.method==='POST'){
  let raw='';req.on('data',chunk=>{raw+=chunk;if(raw.length>2000000)req.destroy();});
  req.on('end',()=>{try{
  const body=JSON.parse(raw);if(!Array.isArray(body.encuestas)||body.encuestas.length>50)return send(res,400,{error:'Lote inválido'});
- const all=load(),byId=new Map(all.map(x=>[x.id,x]));const out=[];
+ const all=load(),byId=new Map(all.map(x=>[x.id,x])),removedIds=deletedIds();const out=[];
  for(const item of body.encuestas){
   if(!item||typeof item.id!=='string'||item.id.length>120||typeof item.encuestador!=='string'||typeof item.parroquia!=='string')continue;
+  if(removedIds.has(item.id)||excludedSurveyors.has(surveyorKey(item.encuestador)))continue;
   let stored=byId.get(item.id);
   if(!stored){const numero=all.length+1;stored={...item,encuestador:normalizeSurveyorName(item.encuestador),numero_encuestado:String(numero),numero_general:numero,sincronizado:true};all.push(stored);byId.set(item.id,stored);}
   out.push({id:item.id,numero:stored.numero_general});
@@ -77,5 +98,5 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
  res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(html);
 });
 });
-try{correctSurveyorRecords();}catch(e){console.error('Error al corregir nombre de encuestadora; datos originales conservados:',e);}
+try{correctSurveyorRecords();removeTestSurveys();}catch(e){console.error('Error al depurar encuestas de prueba; revisar respaldo:',e);}
 server.listen(port,'0.0.0.0',()=>console.log('CEO SUR central sync listening on '+port));
