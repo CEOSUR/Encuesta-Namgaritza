@@ -6,7 +6,7 @@
 <div id="panel"><section class="panel"><div class="toolbar"><button id="refresh">Actualizar datos</button><button id="excel">Descargar Excel profesional</button><button id="backup">Respaldo JSON</button><button id="csv">Descargar CSV filtrado</button></div><p id="updated" class="muted"></p></section>
 <section class="panel"><h2>Filtros de investigación</h2><div class="filters"><select id="parroquia"><option value="">Todas las parroquias</option></select><select id="encuestador"><option value="">Todos los encuestadores</option></select><select id="barrio"><option value="">Todos los barrios</option></select><select id="circunscripcion"><option value="">Todas las circunscripciones</option></select><input id="search" type="search" placeholder="Buscar registro, nombre o respuesta"><button id="clear">Limpiar filtros</button></div></section>
 <section class="cards" id="stats"></section>
-<section class="panel"><h2>Resultados electorales y respuestas</h2><p class="muted">Cada pregunta muestra número de menciones y porcentaje sobre respuestas válidas. En preguntas de selección múltiple los porcentajes pueden superar el 100%.</p><div class="tabs" id="dignityTabs"></div><div id="dignityResults"></div><h3>Otras preguntas de investigación</h3><div id="results"></div></section>
+<section class="panel"><h2>Votación por dignidad · Todos los candidatos</h2><p class="muted">Cada pregunta muestra número de menciones y porcentaje sobre respuestas válidas. En preguntas de selección múltiple los porcentajes pueden superar el 100%.</p><div id="dignityResults"></div><h3>Otras preguntas de investigación</h3><div id="results"></div></section>
 <section class="panel"><h2>Control de calidad</h2><div id="quality"></div></section>
 <section class="panel"><h2>Resumen territorial y de campo</h2><div class="tabs"><button data-tab="parroquia" class="active">Parroquias</button><button data-tab="encuestador">Encuestadores</button><button data-tab="barrio">Barrios</button></div><div class="table-wrap"><table><thead><tr><th id="groupTitle">Parroquia</th><th>Encuestas</th><th>%</th></tr></thead><tbody id="groups"></tbody></table></div></section>
 <section class="panel"><h2>Todos los registros</h2><p id="recordCount" aria-live="polite"></p><p class="muted">Deslice horizontalmente en celular. Seleccione «Ver detalle» para consultar todas las respuestas de una encuesta.</p><div class="table-wrap"><table id="records"><thead><tr><th>N.º</th><th>Fecha</th><th>Encuestador</th><th>Parroquia</th><th>Barrio / sector</th><th>Circunscripción</th><th>GPS</th><th>Detalle</th></tr></thead><tbody id="recordRows"></tbody></table></div><div class="toolbar"><button id="prev">Anterior</button><span id="page"></span><button id="next">Siguiente</button></div><div id="detail"></div></section></div></main>
@@ -40,43 +40,40 @@ const candidateCatalog={
 };
 const canonical=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\\s+/g,' ').toUpperCase();
 function renderDignities(){
- const tabs=el('dignityTabs');tabs.replaceChildren();
- for(const [k,label] of Object.entries(electoral)){
-  const button=document.createElement('button');button.textContent=label;button.className=k===dignity?'active':'';
-  button.onclick=()=>{dignity=k;renderDignities()};tabs.append(button);
- }
  const out=el('dignityResults');out.replaceChildren();
- const territory={vocales_zurmi:'ZURMI',vocales_namkays:'NAMKAYS',vocales_nuevo_paraiso:'NUEVO PARAISO'};
- const applicable=filtered.filter(r=>{
-  const parish=canonical(field(r,'parroquia'));
-  const circ=canonical(field(r,'circunscripcion'));
-  if(territory[dignity]){
-   const aliases=dignity==='vocales_namkays'?['NAMKAYS','NAMKAIS','NANKAIS']: [territory[dignity]];
-   return aliases.includes(parish);
+ const territory={vocales_zurmi:['ZURMI'],vocales_namkays:['NAMKAYS','NAMKAIS','NANKAIS'],vocales_nuevo_paraiso:['NUEVO PARAISO']};
+ for(const [key,title] of Object.entries(electoral)){
+  const applicable=filtered.filter(r=>{
+   const parish=canonical(field(r,'parroquia')),circ=canonical(field(r,'circunscripcion'));
+   if(territory[key])return territory[key].includes(parish);
+   if(key==='concejales_urbanos')return circ==='URBANA'||(!circ&&parish==='GUAYZIMI');
+   if(key==='concejales_rurales')return circ==='RURAL'||(!circ&&parish!==''&&parish!=='GUAYZIMI');
+   return true;
+  });
+  const valid=applicable.filter(r=>String(r[key]??'').trim());
+  const panel=document.createElement('section');panel.className='panel';
+  const heading=document.createElement('h2');heading.textContent=title;panel.append(heading);
+  const info=document.createElement('p');info.className='muted';info.textContent='Encuestas aplicables: '+applicable.length+' · Con respuesta: '+valid.length+' · Sin respuesta: '+(applicable.length-valid.length);panel.append(info);
+  const tally=new Map();
+  const known=[...candidateCatalog[key],'AÚN NO DECIDE','NINGUNO','NO OPINA'];
+  for(const name of known)tally.set(canonical(name),{name,count:0});
+  for(const r of valid){
+   const raw=String(r[key]).trim(),id=canonical(raw);
+   const target=/^(INDECIS[OA]S?|NO SABE|NO HA DECIDIDO|TODAVIA NO DECIDE|AUN NO DECIDE)$/.test(id)?'AUN NO DECIDE':id==='NINGUNA'?'NINGUNO':id;
+   if(!tally.has(target))tally.set(target,{name:raw,count:0});
+   tally.get(target).count++;
   }
-  if(dignity==='concejales_urbanos')return circ==='URBANA'||(!circ&&parish==='GUAYZIMI');
-  if(dignity==='concejales_rurales')return circ==='RURAL'||(!circ&&parish!==''&&parish!=='GUAYZIMI');
-  return true;
- });
- const valid=applicable.filter(r=>String(r[dignity]??'').trim());
- const h=document.createElement('h3');h.textContent=electoral[dignity];out.append(h);
- const info=document.createElement('p');info.className='muted';info.textContent='Encuestas del territorio: '+applicable.length+' · Respuestas válidas: '+valid.length+' · Sin respuesta: '+(applicable.length-valid.length)+'. Porcentajes descriptivos sobre respuestas válidas.';out.append(info);
- const map=new Map();
- for(const name of [...candidateCatalog[dignity],'AÚN NO DECIDE','NINGUNO','NO OPINA'])map.set(canonical(name),{name,count:0});
- for(const r of valid){
-  const raw=String(r[dignity]).trim(),id=canonical(raw);
-  const target=/^(INDECIS[OA]S?|NO SABE|NO HA DECIDIDO|TODAVIA NO DECIDE|AUN NO DECIDE)$/.test(id)?'AUN NO DECIDE':id==='NINGUNA'?'NINGUNO':id;
-  if(!map.has(target))map.set(target,{name:raw,count:0});
-  map.get(target).count++;
- }
- for(const item of [...map.values()].sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name,'es'))){
-  const wrap=document.createElement('div');wrap.className='result';
-  const top=document.createElement('div');top.className='result-head';
-  const name=document.createElement('span');name.textContent=item.name;
-  const n=document.createElement('strong');n.textContent=item.count+' votos · '+(valid.length?(100*item.count/valid.length).toFixed(1):'0.0')+'%';
-  top.append(name,n);const bar=document.createElement('div');bar.className='bar';
-  const fill=document.createElement('div');fill.className='fill';fill.style.width=(valid.length?100*item.count/valid.length:0)+'%';
-  bar.append(fill);wrap.append(top,bar);out.append(wrap);
+  const table=document.createElement('table'),thead=document.createElement('thead'),header=document.createElement('tr');
+  for(const label of ['Candidato / respuesta','Votos','Porcentaje','Gráfico']){const th=document.createElement('th');th.textContent=label;header.append(th)}thead.append(header);table.append(thead);
+  const tbody=document.createElement('tbody');
+  for(const entry of [...tally.values()].sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name,'es'))){
+   const tr=document.createElement('tr');cell(tr,entry.name);cell(tr,entry.count);
+   const pct=valid.length?entry.count/valid.length*100:0;cell(tr,pct.toFixed(1)+'%');
+   const td=cell(tr,'');const bar=document.createElement('div');bar.className='bar';const fill=document.createElement('div');fill.className='fill';fill.style.width=pct+'%';bar.append(fill);td.append(bar);tbody.append(tr);
+  }
+  table.append(tbody);const wrap=document.createElement('div');wrap.className='table-wrap';wrap.append(table);panel.append(wrap);
+  if(!valid.length){const note=document.createElement('p');note.className='muted';note.textContent='No hay respuestas sincronizadas para esta dignidad y los filtros actuales. Los nombres del catálogo se muestran con cero, sin inventar votos.';panel.append(note)}
+  out.append(panel);
  }
 }
 const metadata=new Set(['id','numero_encuestado','numero_general','sincronizado','encuestador','parroquia','circunscripcion','circunscripción','barrio','sector','barrio_sector','lugar_residencia','barrio_residencia','latitud','longitud','precision_metros','ubicacion_mapa','fecha','fecha_hora','timestamp','created_at','updated_at','ubicacion','parroquia_realizacion']);
