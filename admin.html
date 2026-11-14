@@ -38,7 +38,7 @@ const candidateCatalog={
  vocales_namkays:['MÁXIMO NANKAMAI','NANCY CHINGUÑI','EDWIN NANTIPA','DELIA JUDITH CHIRIAP'],
  vocales_nuevo_paraiso:['JOSÉ MANUEL CALVA CALVA','MARLENE MARILÚ GONZÁLEZ RAMÓN','LUIS POLIVIO GUAILLAS GUALAN']
 };
-const canonical=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\\s+/g,' ').toUpperCase();
+const canonical=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\s+/g,' ').toUpperCase();
 function renderDignities(){
  const out=el('dignityResults');out.replaceChildren();
  const territory={vocales_zurmi:['ZURMI'],vocales_namkays:['NAMKAYS','NAMKAIS','NANKAIS'],vocales_nuevo_paraiso:['NUEVO PARAISO']};
