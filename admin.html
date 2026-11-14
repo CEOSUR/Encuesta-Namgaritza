@@ -60,7 +60,7 @@ function renderDignities(){
   for(const r of valid){
    const raw=String(r[key]).trim(),id=canonical(raw);
    const target=/^(INDECIS[OA]S?|NO SABE|NO HA DECIDIDO|TODAVIA NO DECIDE|AUN NO DECIDE)$/.test(id)?'AUN NO DECIDE':id==='NINGUNA'?'NINGUNO':id;
-   if(!tally.has(target))tally.set(target,{name:raw,count:0});
+   if(!tally.has(target)){const matches=[...tally.keys()].filter(k=>{const words=target.split(' '),known=k.split(' ');return words.length>=2&&known.length>=2&&(words.every(w=>known.includes(w))||known.every(w=>words.includes(w)))});const match=matches.length===1?matches[0]:null;if(match){tally.get(match).count++;continue;}tally.set(target,{name:raw,count:0});}
    tally.get(target).count++;
   }
   const table=document.createElement('table'),thead=document.createElement('thead'),header=document.createElement('tr');
