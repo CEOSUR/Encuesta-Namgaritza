@@ -14,8 +14,11 @@ const excludedSurveyors=new Set(['PATRICIO URTADO','PATRICIO U','PATO U','MARIA 
 function surveyorKey(v){return String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\s+/g,' ').toUpperCase();}
 const deletedIdsFile='/data/encuestas_pruebas_eliminadas_ids.json';
 function deletedIds(){try{const ids=JSON.parse(fs.readFileSync(deletedIdsFile,'utf8'));return new Set(Array.isArray(ids)?ids:[]);}catch(e){if(e.code==='ENOENT')return new Set();throw e;}}
+const reassignedIdsFile='/data/encuestas_reasignadas_aprobadas_ids.json';
+function reassignedIds(){try{const ids=JSON.parse(fs.readFileSync(reassignedIdsFile,'utf8'));return new Set(Array.isArray(ids)?ids:[]);}catch(e){if(e.code==='ENOENT')return new Set();throw e;}}
 function removeTestSurveys(){
- const original=load(),selected=original.filter(r=>r&&excludedSurveyors.has(surveyorKey(r.encuestador)));
+ const approved=reassignedIds();
+ const original=load(),selected=original.filter(r=>r&&excludedSurveyors.has(surveyorKey(r.encuestador))&&!approved.has(r.id));
  if(!selected.length){console.log('Depuración de encuestas de prueba: sin registros pendientes. Total: '+original.length);return;}
  fs.mkdirSync('/data',{recursive:true});
  const stamp=new Date().toISOString().replace(/[:.]/g,'-');
@@ -37,6 +40,22 @@ if((url==='/cliente'||url==='/cliente/')&&req.method==='GET'){res.writeHead(200,
 if((url==='/admin'||url==='/admin.html')&&req.method==='GET'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});return fs.createReadStream(path.join(__dirname,'admin.html')).pipe(res);}
 if(url==='/api/admin/excel'&&req.method==='GET'){if(!process.env.CEOSUR_ADMIN_PASSWORD||req.headers['x-admin-key']!==process.env.CEOSUR_ADMIN_PASSWORD)return send(res,403,{error:'Acceso restringido'});return require('./exporter').build(load()).then(buffer=>{res.writeHead(200,{'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','Content-Disposition':'attachment; filename="CEO_SUR_Nangaritza_Informe_Profesional.xlsx"','Cache-Control':'no-store'});res.end(Buffer.from(buffer));}).catch(e=>{console.error('Excel export:',e);if(!res.headersSent)send(res,500,{error:'No se pudo generar Excel'});});}
 if(url==='/api/admin/data'&&req.method==='GET'){if(!process.env.CEOSUR_ADMIN_PASSWORD||req.headers['x-admin-key']!==process.env.CEOSUR_ADMIN_PASSWORD)return send(res,403,{error:'Acceso restringido'});try{return send(res,200,{encuestas:load()});}catch(e){return send(res,500,{error:'Error de datos'});}}
+if(url==='/api/admin/reassign-surveyor'&&req.method==='POST'){
+ if(!process.env.CEOSUR_ADMIN_PASSWORD||req.headers['x-admin-key']!==process.env.CEOSUR_ADMIN_PASSWORD)return send(res,403,{error:'Acceso restringido'});
+ let raw='';req.on('data',chunk=>{raw+=chunk;if(raw.length>100000)req.destroy();});
+ req.on('end',()=>{try{
+  const body=JSON.parse(raw),records=body.records;
+  if(!Array.isArray(records)||records.length!==8||records.some(x=>!x||typeof x.id!=='string'||typeof x.from!=='string')||new Set(records.map(x=>x.id)).size!==records.length)return send(res,400,{error:'Solicitud inválida'});
+  const all=load(),byId=new Map(records.map(x=>[x.id,x]));
+  const matches=all.filter(r=>byId.has(r.id)&&r.encuestador===byId.get(r.id).from);
+  if(matches.length!==records.length)return send(res,409,{error:'Los registros cambiaron; no se modificó ningún dato'});
+  const approved=reassignedIds();for(const x of records)approved.add(x.id);
+  fs.mkdirSync('/data',{recursive:true});const approvedTmp=reassignedIdsFile+'.tmp';fs.writeFileSync(approvedTmp,JSON.stringify([...approved]));fs.renameSync(approvedTmp,reassignedIdsFile);
+  const updated=all.map(r=>byId.has(r.id)?{...r,encuestador:'María Fernanda López'}:r);save(updated);
+  return send(res,200,{actualizados:records.length,total:updated.length,encuestador:'María Fernanda López'});
+ }catch(e){console.error('Reasignación de encuestadores:',e);return send(res,500,{error:'No se pudo completar la reasignación'});}});
+ return;
+}
 if(url==='/api/status'&&req.method==='GET'){try{return send(res,200,{total:load().length});}catch(e){return send(res,500,{error:'No se pudo consultar la base de datos'});}}
 if(url==='/api/sync'&&req.method==='POST'){
  let raw='';req.on('data',chunk=>{raw+=chunk;if(raw.length>2000000)req.destroy();});
@@ -45,7 +64,7 @@ if(url==='/api/sync'&&req.method==='POST'){
  const all=load(),byId=new Map(all.map(x=>[x.id,x])),removedIds=deletedIds();const out=[];
  for(const item of body.encuestas){
   if(!item||typeof item.id!=='string'||item.id.length>120||typeof item.encuestador!=='string'||typeof item.parroquia!=='string')continue;
-  if(removedIds.has(item.id)||excludedSurveyors.has(surveyorKey(item.encuestador)))continue;
+  if(removedIds.has(item.id)||(excludedSurveyors.has(surveyorKey(item.encuestador))&&!reassignedIds().has(item.id)))continue;
   let stored=byId.get(item.id);
   if(!stored){const numero=all.length+1;stored={...item,encuestador:normalizeSurveyorName(item.encuestador),numero_encuestado:String(numero),numero_general:numero,sincronizado:true};all.push(stored);byId.set(item.id,stored);}
   out.push({id:item.id,numero:stored.numero_general});
