@@ -17,7 +17,7 @@ const val=(r,k)=>String(r[k]??'').trim();
 const norm=v=>String(v??'').trim().toLocaleLowerCase('es');
 const keys={parroquia:['parroquia'],encuestador:['encuestador'],barrio:['barrio','sector','barrio_sector','lugar_residencia','barrio_residencia'],circunscripcion:['circunscripcion','circunscripción']};
 const first=(r,arr)=>{for(const k of arr){if(val(r,k))return val(r,k)}return ''};
-function nombreEncuestadora(v){const name=String(v??'').trim();const key=name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').toUpperCase();return /^BELGICA\s+MARISOL\s+RAMIREZ(?:\s+.+)?$/.test(key.replace(/[^A-Z\s]/g,' ').replace(/\s+/g,' ').trim())?'Bélgica Marisol Ramírez Armijos':name;}
+function nombreEncuestadora(v){const name=String(v??'').trim();const key=name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').toUpperCase();return /^BELGICA\s+MARISOL\s+RAMIREZ(?:\s+.+)?$/.test(key.replace(/[^A-Z\s]/g,' ').replace(/\s+/g,' ').trim())?'Bélgica Marisol Ramírez Armijos':/^ALEXANDRA\s+SOLEDAD\s+VALDE[ZS]\s+HUANCA$/.test(key.replace(/[^A-Z\s]/g,' ').replace(/\s+/g,' ').trim())?'Alexandra Soledad Valdez Huanca':name;}
 const field=(r,k)=>k==='encuestador'?nombreEncuestadora(first(r,keys[k])):first(r,keys[k]||[k]);
 function cell(tr,v){const td=document.createElement('td');td.textContent=String(v??'');tr.append(td);return td}
 function tableRows(id,entries,total){const body=el(id);body.replaceChildren();for(const [name,count] of entries){const tr=document.createElement('tr');cell(tr,name);cell(tr,count);cell(tr,total?(count/total*100).toFixed(1)+'%':'0%');body.append(tr)}}
